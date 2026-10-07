@@ -10,24 +10,18 @@ import javafx.scene.control.TextField;
 
 public class CtrlConfig implements Initializable {
 
-    @FXML
-    public TextField txtProtocol;
-
-    @FXML
-    public TextField txtHost;
-
-    @FXML
-    public TextField txtPort;
-
-    @FXML
-    public Label txtMessage;
+    @FXML public TextField txtProtocol;
+    @FXML public TextField txtHost;
+    @FXML public TextField txtPort;
+    @FXML public TextField txtNick;
+    @FXML public Label txtMessage;
 
     @Override
-    public void initialize(URL url, ResourceBundle rb) {
-    }
+    public void initialize(URL url, ResourceBundle rb) {}
 
     @FXML
     private void connectToServer() {
+        Main.playerNick = txtNick.getText().trim();
         Main.connectToServer();
     }
 

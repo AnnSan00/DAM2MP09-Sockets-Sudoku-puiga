@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox xmlns="http://javafx.com/fxml" fx:controller="com.clientFX.CtrlRanking" 
+      alignment="CENTER" spacing="15" style="-fx-padding: 20;">
+    <Label text="Classificació Final" style="-fx-font-size: 20px; -fx-font-weight: bold;"/>
+    
+    <ListView fx:id="listRanking" prefHeight="200" prefWidth="250"/>
+
+    <Button text="Tornar a jugar" onAction="#playAgain" style="-fx-font-size: 14px;"/>
+</VBox>
