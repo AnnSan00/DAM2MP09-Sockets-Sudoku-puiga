@@ -1,15 +1,14 @@
 package com.clientCMD;
 
-import org.json.JSONObject;
-import org.json.JSONArray;
+import java.util.ArrayList;
+import java.util.List;
 
+import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.UserInterruptException;
-import org.jline.reader.EndOfFileException;
-
-import java.util.ArrayList;
-import java.util.List;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class Main {
 

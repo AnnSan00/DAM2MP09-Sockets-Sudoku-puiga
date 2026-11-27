@@ -1,30 +1,62 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<?import javafx.scene.control.*?>
-<?import javafx.scene.layout.*?>
 
-<VBox xmlns="http://javafx.com/fxml" fx:controller="com.clientFX.CtrlConfig" 
-      alignment="CENTER" spacing="10" style="-fx-padding: 20;">
-    <Label text="Configuració del Servidor" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
-    
-    <GridPane hgap="10" vgap="10" alignment="CENTER">
-        <Label text="Protocol:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-        <TextField fx:id="txtProtocol" text="ws" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Pane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
 
-        <Label text="Host:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-        <TextField fx:id="txtHost" text="localhost" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
-
-        <Label text="Port:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
-        <TextField fx:id="txtPort" text="3000" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
-
-        <Label text="Jugador (Nick):" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
-        <TextField fx:id="txtNick" text="Albert" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
-    </GridPane>
-
-    <HBox spacing="10" alignment="CENTER">
-        <Button text="Local" onAction="#setConfigLocal"/>
-        <Button text="Proxmox" onAction="#setConfigProxmox"/>
-        <Button text="Connectar" onAction="#connectToServer"/>
-    </HBox>
-
-    <Label fx:id="txtMessage" text="" />
-</VBox>
+<AnchorPane minHeight="500.0" minWidth="600.0" xmlns="http://javafx.com/javafx/19" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.clientFX.CtrlConfig">
+   <children>
+      <VBox alignment="CENTER" spacing="10.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+         <children>
+            <Label text="Sudoku multijugador">
+               <font>
+                  <Font size="36.0" />
+               </font>
+               <VBox.margin>
+                  <Insets top="16.0" />
+               </VBox.margin>
+            </Label>
+            <Pane VBox.vgrow="ALWAYS" />
+            <GridPane alignment="CENTER" hgap="10.0" vgap="10.0">
+               <children>
+                  <Label text="Nom del jugador" GridPane.halignment="RIGHT" />
+                  <TextField fx:id="txtName" prefWidth="200.0" promptText="El teu nom" GridPane.columnIndex="1" />
+                  <Label text="Protocol" GridPane.halignment="RIGHT" GridPane.rowIndex="1" />
+                  <TextField fx:id="txtProtocol" text="ws" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                  <Label text="Server IP" GridPane.halignment="RIGHT" GridPane.rowIndex="2" />
+                  <TextField fx:id="txtHost" text="localhost" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                  <Label text="Port" GridPane.halignment="RIGHT" GridPane.rowIndex="3" />
+                  <TextField fx:id="txtPort" text="3000" GridPane.columnIndex="1" GridPane.rowIndex="3" />
+               </children>
+            </GridPane>
+            <Button mnemonicParsing="false" onAction="#connectToServer" text="Connecta">
+               <VBox.margin>
+                  <Insets top="16.0" />
+               </VBox.margin>
+            </Button>
+            <Label fx:id="txtMessage">
+               <VBox.margin>
+                  <Insets bottom="16.0" top="8.0" />
+               </VBox.margin>
+            </Label>
+            <Pane VBox.vgrow="ALWAYS" />
+            <HBox alignment="BOTTOM_LEFT" spacing="8.0">
+               <children>
+                  <Button mnemonicParsing="false" onAction="#setConfigLocal" text="Local" />
+                  <Button mnemonicParsing="false" onAction="#setConfigProxmox" text="Proxmox" />
+               </children>
+               <VBox.margin>
+                  <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
+               </VBox.margin>
+            </HBox>
+         </children>
+      </VBox>
+   </children>
+</AnchorPane>

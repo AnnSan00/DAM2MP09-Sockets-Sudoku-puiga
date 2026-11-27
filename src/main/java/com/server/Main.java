@@ -1,165 +1,157 @@
 package com.server;
 
-import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.java_websocket.WebSocket;
+import org.java_websocket.exceptions.WebsocketNotConnectedException;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.net.InetSocketAddress;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+
+/**
+ * Servidor WebSocket del Sudoku multijugador.
+ *
+ * Missatges client → servidor:
+ *  - join      {name}               entra a la partida amb un nom
+ *  - move      {row, col, value}    intenta posar un valor (files/columnes 0..8)
+ *  - playAgain {}                   si la partida ha acabat, en comença una de nova
+ *
+ * Missatges servidor → client:
+ *  - state     {you, board[81], status[81], players[{name,score}], finished}
+ *  - wrong     {row, col}           el valor no era correcte (-1 punt)
+ *  - error     {message}
+ */
 public class Main extends WebSocketServer {
 
-    private static final int PORT = 3000;
-    private final Map<WebSocket, ClientRegistry> clients = new ConcurrentHashMap<>();
-    private int clientCounter = 1;
+    public static final int DEFAULT_PORT = 3000;
 
-    // Tablero inicial (0 representa casilla vacía)
-    private final int[][] initialBoard = {
-        {5,3,0, 0,7,0, 0,0,0},
-        {6,0,0, 1,9,5, 0,0,0},
-        {0,9,8, 0,0,0, 0,6,0},
-        {8,0,0, 0,6,0, 0,0,3},
-        {4,0,0, 8,0,3, 0,0,1},
-        {7,0,0, 0,2,0, 0,0,6},
-        {0,6,0, 0,0,0, 2,8,0},
-        {0,0,0, 4,1,9, 0,0,5},
-        {0,0,0, 0,8,0, 0,7,9}
-    };
+    private static final int POINTS_CORRECT = 2;
+    private static final int POINTS_WRONG = -1;
 
-    // Solución correcta del Sudoku
-    private final int[][] solutionBoard = {
-        {5,3,4, 6,7,8, 9,1,2},
-        {6,7,2, 1,9,5, 3,4,8},
-        {1,9,8, 3,4,2, 5,6,7},
-        {8,5,9, 7,6,1, 4,2,3},
-        {4,2,6, 8,5,3, 7,9,1},
-        {7,1,3, 9,2,4, 8,5,6},
-        {9,6,1, 5,3,7, 2,8,4},
-        {2,8,7, 4,1,9, 6,3,5},
-        {3,4,5, 2,8,6, 1,7,9}
-    };
+    private final ClientRegistry clients = new ClientRegistry();
+    private final Object gameLock = new Object();
+    private SudokuGame game = new SudokuGame();
 
-    private int[][] currentBoard = new int[9][9];
-    private boolean[][] lockedBoard = new boolean[9][9];
-
-    public Main(int port) {
-        super(new InetSocketAddress(port));
-        resetBoard();
+    public Main(InetSocketAddress address) {
+        super(address);
     }
 
-    private void resetBoard() {
-        for (int r = 0; r < 9; r++) {
-            for (int c = 0; c < 9; c++) {
-                currentBoard[r][c] = initialBoard[r][c];
-                lockedBoard[r][c] = (initialBoard[r][c] != 0);
-            }
-        }
+    // ----------------- Helpers JSON -----------------
+
+    private static JSONObject msg(String type) {
+        return new JSONObject().put("type", type);
     }
 
-    @Override
-    public void onOpen(WebSocket conn, ClientHandshake handshake) {
-        String clientId = "clientX" + (clientCounter++);
-        ClientRegistry client = new ClientRegistry(clientId, conn);
-        clients.put(conn, client);
-        System.out.println("Cliente conectado: " + clientId);
-        sendGameState(conn);
-    }
-
-    @Override
-    public void onClose(WebSocket conn, int code, String reason, boolean remote) {
-        clients.remove(conn);
-        broadcastGameState();
-    }
-
-    @Override
-    public void onMessage(WebSocket conn, String message) {
+    private void sendSafe(WebSocket to, String payload) {
+        if (to == null) return;
         try {
-            JSONObject msg = new JSONObject(message);
-            String type = msg.getString("type");
-            ClientRegistry client = clients.get(conn);
-
-            if (client == null) return;
-
-            switch (type) {
-                case "join":
-                    String nick = msg.optString("nick", client.getId());
-                    client.setNick(nick);
-                    broadcastGameState();
-                    break;
-
-                case "move":
-                    int r = msg.getInt("row");
-                    int c = msg.getInt("col");
-                    int val = msg.getInt("val");
-
-                    if (!lockedBoard[r][c]) {
-                        if (solutionBoard[r][c] == val) {
-                            currentBoard[r][c] = val;
-                            lockedBoard[r][c] = true; // Bloquear casilla
-                            client.addScore(2);      // +2 puntos por acierto
-                        } else {
-                            client.addScore(-1);     // -1 punto por error
-                        }
-                        broadcastGameState();
-                    }
-                    break;
-
-                case "restart":
-                    resetBoard();
-                    for (ClientRegistry cReg : clients.values()) {
-                        cReg.resetScore();
-                    }
-                    broadcastGameState();
-                    break;
-            }
+            to.send(payload);
+        } catch (WebsocketNotConnectedException e) {
+            System.out.println("Client desconnectat durant send: " + clients.remove(to));
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private void broadcastGameState() {
-        for (WebSocket conn : clients.keySet()) {
-            sendGameState(conn);
+    /** Estat complet de la partida, personalitzat amb el nom del destinatari. */
+    private JSONObject stateFor(String name) {
+        return msg("state")
+                .put("you", name)
+                .put("board", new JSONArray(game.boardCopy()))
+                .put("status", new JSONArray(game.statusCopy()))
+                .put("players", clients.ranking())
+                .put("finished", game.isFinished());
+    }
+
+    /** Envia l'estat a tots els jugadors que ja han fet join. */
+    private void broadcastState() {
+        for (Map.Entry<WebSocket, String> e : clients.snapshot().entrySet()) {
+            sendSafe(e.getKey(), stateFor(e.getValue()).toString());
         }
     }
 
-    private void sendGameState(WebSocket conn) {
-        JSONObject state = new JSONObject();
-        state.put("type", "game_state");
-        state.put("board", new JSONArray(currentBoard));
-        state.put("locked", new JSONArray(lockedBoard));
+    // ----------------- WebSocketServer overrides -----------------
 
-        // Lista de jugadores ordenada por puntuación descendente
-        List<ClientRegistry> playerList = new ArrayList<>(clients.values());
-        playerList.sort((a, b) -> Integer.compare(b.getScore(), a.getScore()));
+    @Override
+    public void onOpen(WebSocket conn, ClientHandshake handshake) {
+        System.out.println("Connexió oberta, esperant join...");
+    }
 
-        JSONArray playersArray = new JSONArray();
-        for (ClientRegistry p : playerList) {
-            JSONObject pObj = new JSONObject();
-            pObj.put("nick", p.getNick());
-            pObj.put("score", p.getScore());
-            playersArray.put(pObj);
-        }
-        state.put("players", playersArray);
-
-        // Verificar si se ha completado el tablero
-        boolean finished = true;
-        for (int r = 0; r < 9; r++) {
-            for (int c = 0; c < 9; c++) {
-                if (!lockedBoard[r][c]) {
-                    finished = false;
-                    break;
-                }
+    @Override
+    public void onClose(WebSocket conn, int code, String reason, boolean remote) {
+        String name = clients.remove(conn);
+        System.out.println("Client desconnectat: " + name);
+        if (name != null) {
+            synchronized (gameLock) {
+                broadcastState();
             }
         }
-        state.put("gameFinished", finished);
+    }
 
-        conn.send(state.toString());
+    @Override
+    public void onMessage(WebSocket conn, String message) {
+        JSONObject obj;
+        try {
+            obj = new JSONObject(message);
+        } catch (Exception ex) {
+            sendSafe(conn, msg("error").put("message", "JSON invàlid").toString());
+            return;
+        }
+
+        switch (obj.optString("type", "")) {
+            case "join" -> handleJoin(conn, obj);
+            case "move" -> handleMove(conn, obj);
+            case "playAgain" -> handlePlayAgain(conn);
+            default -> sendSafe(conn, msg("error")
+                    .put("message", "Tipus desconegut: " + obj.optString("type", "")).toString());
+        }
+    }
+
+    private void handleJoin(WebSocket conn, JSONObject obj) {
+        String name = clients.join(conn, obj.optString("name", ""));
+        System.out.println("Jugador: " + name);
+        synchronized (gameLock) {
+            broadcastState(); // el nou jugador rep l'estat i la resta veu la llista actualitzada
+        }
+    }
+
+    private void handleMove(WebSocket conn, JSONObject obj) {
+        if (clients.nameOf(conn) == null) {
+            sendSafe(conn, msg("error").put("message", "Primer cal fer join").toString());
+            return;
+        }
+        int row = obj.optInt("row", -1);
+        int col = obj.optInt("col", -1);
+        int value = obj.optInt("value", 0);
+
+        synchronized (gameLock) {
+            if (game.isFinished()) return;
+            int result = game.play(row, col, value);
+            if (result == SudokuGame.CORRECT) {
+                clients.addScore(conn, POINTS_CORRECT);
+                broadcastState();
+            } else if (result == SudokuGame.WRONG) {
+                clients.addScore(conn, POINTS_WRONG);
+                sendSafe(conn, msg("wrong").put("row", row).put("col", col).toString());
+                broadcastState();
+            }
+            // IGNORED (casella ja bloquejada o dades invàlides): no fem res
+        }
+    }
+
+    private void handlePlayAgain(WebSocket conn) {
+        if (clients.nameOf(conn) == null) return;
+        synchronized (gameLock) {
+            if (game.isFinished()) {
+                game = new SudokuGame();
+                clients.resetScores();
+                System.out.println("Nova partida");
+            }
+            broadcastState();
+        }
     }
 
     @Override
@@ -169,11 +161,38 @@ public class Main extends WebSocketServer {
 
     @Override
     public void onStart() {
-        System.out.println("Servidor de Sudoku corriendo en el puerto " + PORT);
+        System.out.println("Servidor WebSocket engegat al port: " + getPort());
+        setConnectionLostTimeout(100);
+    }
+
+    // ----------------- Lifecycle util -----------------
+
+    private static void registerShutdownHook(Main server) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Aturant servidor (shutdown hook)...");
+            try {
+                server.stop(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+                Thread.currentThread().interrupt();
+            }
+            System.out.println("Servidor aturat.");
+        }));
+    }
+
+    private static void awaitForever() {
+        try {
+            new CountDownLatch(1).await();
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public static void main(String[] args) {
-        Main server = new Main(PORT);
+        Main server = new Main(new InetSocketAddress(DEFAULT_PORT));
         server.start();
+        registerShutdownHook(server);
+        System.out.println("Servidor Sudoku en execució al port " + DEFAULT_PORT + ". Prem Ctrl+C per aturar-lo.");
+        awaitForever();
     }
 }
